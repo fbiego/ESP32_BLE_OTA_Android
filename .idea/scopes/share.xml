@@ -1,0 +1,3 @@
+<component name="DependencyValidationManager">
+  <scope name="share" pattern="src[ESP32_BLE_OTA.app]:*..*||test[ESP32_BLE_OTA.app]:*..*" />
+</component>
