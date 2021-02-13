@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item android:id="@+id/menu_item_start"
+        android:title="@string/start_service"
+        android:contentDescription="@string/start_service"
+        android:icon="@drawable/ic_start"
+        android:orderInCategory="100"
+        app:showAsAction="ifRoom"
+        />
+
+    <item android:id="@+id/menu_item_kill"
+        android:title="@string/stop_service"
+        android:contentDescription="@string/stop_service"
+        android:icon="@drawable/ic_off"
+        android:orderInCategory="100"
+        app:showAsAction="ifRoom"
+        />
+
+    <item android:id="@+id/menu_item_prefs"
+        android:title="@string/settings"
+        android:contentDescription="@string/settings"
+        android:icon="@drawable/ic_settings"
+        android:orderInCategory="100"
+        app:showAsAction="ifRoom"
+        />
+
+
+</menu>

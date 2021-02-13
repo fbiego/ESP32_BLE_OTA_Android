@@ -1,0 +1,4 @@
+include ':app'
+include ':ble'
+project(':ble').projectDir = file('../Android-BLE-Library/ble')
+rootProject.name = "ESP32 BLE OTA"
