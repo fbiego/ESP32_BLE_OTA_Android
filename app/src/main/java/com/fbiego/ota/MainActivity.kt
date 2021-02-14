@@ -265,8 +265,20 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             }
 
             R.id.buttonUpload -> {
-                if (FG().sendData(byteArrayOfInts(0xFD))) { //format SPIFFS before sending data
-                    FG().uploadFile(this)
+                clearData()
+                val parts = generate()
+                FG.parts = parts
+                if (FG().sendData(byteArrayOfInts(0xFD))) {
+                    FG().sendData(
+                        byteArrayOfInts(
+                            0xFF,
+                            parts / 256,
+                            parts % 256,
+                            MTU / 256,
+                            MTU % 256
+                        )
+                    )
+                    FG().sendData(this, 0)
                 } else {
                     Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
                 }
@@ -277,23 +289,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             }
             R.id.cardView -> {
                 //FG().sendData(byteArrayOfInts(0xFE))
-                clearData()
-                val parts = generate()
-                FG.parts = parts
-                if (FG().sendData(
-                        byteArrayOfInts(
-                            0xFF,
-                            parts / 256,
-                            parts % 256,
-                            MTU / 256,
-                            MTU % 256
-                        )
-                    )
-                ) {
-                    FG().sendData(this, 0)
-                } else {
-                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
-                }
+
             }
             R.id.getInfo -> {
 

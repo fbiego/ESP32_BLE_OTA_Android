@@ -34,6 +34,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -443,6 +444,15 @@ class ForegroundService : Service(), DataListener {
             val next = ((data.getByte(1)!!.toPInt()) * 256) + (data.getByte(2)!!.toPInt())
             sendData(context, next)
         }
+        if (data.getByte(0) == (0xF2).toByte()) {
+            Timber.e("Transfer complete")
+            Toast.makeText(context, "Transfer Complete", Toast.LENGTH_SHORT).show()
+            notifyProgress("Finishing up", 100, context)
+            Handler().postDelayed({
+                //sendData(byteArrayOfInts(0xFE)) // send restart command
+                cancelNotification(SERVICE_ID2, context)
+            }, 2000)
+        }
 
         MN().onDataReceived(data)
 
@@ -461,50 +471,6 @@ class ForegroundService : Service(), DataListener {
         ProgressReceiver().getProgress(progress, txt)
     }
 
-
-    @Throws(IOException::class)
-    fun uploadFile(context: Context){
-        val size = 49
-        val bytes = File(context.cacheDir, "update.bin").readBytes()
-        val total = bytes.size / size
-
-        var prog = 0
-
-        Timber.e("Size: ${bytes.size}")
-        for (x in 0 until total){
-            val array = ByteArray(size+1)
-            array[0] = (0xFB).toByte()
-            for (y in 0 until size){
-                array[y+1] = bytes[(x*size)+y]
-            }
-            val cur = ((x.toFloat()/total)*100).toInt()
-            if (prog != cur){
-                prog = cur
-                transmitData(array, cur, context)
-            } else {
-                sendData(array)
-            }
-
-        }
-        if (bytes.size % size != 0){
-            val rem = (bytes.size % size)
-            val array = ByteArray(rem+1)
-            array[0] = (0xFB).toByte()
-            for (y in 0 until rem){
-                array[y+1] = bytes[((total)*size)+y]
-            }
-            transmitData(array, 100, context)
-
-        }
-
-        Timber.e("Transfer complete")
-        notifyProgress("Finishing up", 100, context)
-        Handler().postDelayed({
-            sendData(byteArrayOfInts(0xFE)) // send restart command
-            cancelNotification(SERVICE_ID2, context)
-        }, 2000)
-
-    }
 
     @Throws(IOException::class)
     fun sendData(context: Context, pos: Int) {
@@ -534,7 +500,6 @@ class ForegroundService : Service(), DataListener {
         }
 
         val update = byteArrayOfInts(0xFC, data.size / 256, data.size % 256, pos / 256, pos % 256)
-        sendData(update)
         val cur = ((pos.toFloat() / parts) * 100).toInt()
         transmitData(update, cur, context)
     }
