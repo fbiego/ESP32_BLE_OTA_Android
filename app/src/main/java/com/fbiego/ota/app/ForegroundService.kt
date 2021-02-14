@@ -362,7 +362,7 @@ class ForegroundService : Service(), DataListener {
             super.onDeviceDisconnected(device)
             connected = false
             Timber.d("Disconnected from ${device.name}")
-            notify(getString(R.string.disconnected)+" ${device.name}", notify!=0, SERVICE_ID)
+            notify(getString(R.string.disconnected)+" ${device.name}", true, SERVICE_ID)
             ConnectionReceiver().notifyStatus(false)
         }
 
@@ -377,7 +377,7 @@ class ForegroundService : Service(), DataListener {
             super.onLinkLossOccurred(device)
             connected = false
             Timber.d("Lost link to ${device.name}")
-            notify(getString(R.string.loss_link)+" ${device.name}", notify!=0, SERVICE_ID)
+            notify(getString(R.string.loss_link)+" ${device.name}", true, SERVICE_ID)
             ConnectionReceiver().notifyStatus(false)
         }
 
@@ -462,6 +462,8 @@ class ForegroundService : Service(), DataListener {
         val bytes = File(context.cacheDir, "update.bin").readBytes()
         val total = bytes.size / size
 
+        var prog = 0
+
         Timber.e("Size: ${bytes.size}")
         for (x in 0 until total){
             val array = ByteArray(size+1)
@@ -469,8 +471,14 @@ class ForegroundService : Service(), DataListener {
             for (y in 0 until size){
                 array[y+1] = bytes[(x*size)+y]
             }
-            val cur = (x.toFloat()/total)*100
-            transmitData(array, cur.toInt(), context)
+            val cur = ((x.toFloat()/total)*100).toInt()
+            if (prog != cur){
+                prog = cur
+                transmitData(array, cur, context)
+            } else {
+                sendData(array)
+            }
+
         }
         if (bytes.size % size != 0){
             val rem = (bytes.size % size)
@@ -483,9 +491,10 @@ class ForegroundService : Service(), DataListener {
 
         }
 
-        Timber.w("Transfer complete")
+        Timber.e("Transfer complete")
         notifyProgress("Finishing up",  100, context)
         Handler().postDelayed({
+            sendData(byteArrayOfInts(0xFE)) // send restart command
             cancelNotification(SERVICE_ID2, context)
         }, 2000)
 

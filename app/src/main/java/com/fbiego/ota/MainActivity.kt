@@ -119,13 +119,19 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
 
         val directory = this.cacheDir
         val img = File(directory, UPDATE_FILE)
+        val info = File(directory, "info.txt")
         val name = if (img.exists()){
             buttonUpload.visibility = View.VISIBLE
-            setPref.getString(PREF_CURRENT_FILE, "no file")
+            if (info.exists() && info.canRead()){
+                info.readText()
+            } else {
+                "no file"
+            }
         } else {
             buttonUpload.visibility = View.GONE
             "no file"
         }
+        textProgress.text = name
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -253,14 +259,18 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
             }
 
             R.id.buttonUpload -> {
-                FG().uploadFile(this)
+                if (FG().sendData(byteArrayOfInts(0xFD))) { //format SPIFFS before sending data
+                    FG().uploadFile(this)
+                } else {
+                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
+                }
             }
 
             R.id.cardInfo -> {
-                FG().sendData(byteArrayOfInts(0xFD))
+                //FG().sendData(byteArrayOfInts(0xFD))
             }
             R.id.cardView -> {
-                FG().sendData(byteArrayOfInts(0xFE))
+                //FG().sendData(byteArrayOfInts(0xFE))
             }
         }
 
@@ -297,6 +307,9 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
             dst.delete()
 
         }
+        val info = File(directory, "info.txt")
+        info.writeText(src.name)
+
         FileInputStream(src).use { `in` ->
             FileOutputStream(dst).use { out ->
                 // Transfer bytes from in to out
@@ -346,7 +359,12 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
     }
 
     override fun onDataReceived(data: Data) {
+        Timber.e("${data.getByte(0)}")
         runOnUiThread {
+            if (data.getByte(0) == (0xFA).toByte()){
+                val ver = String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
+                watchName.text = "${FG.deviceName}\t$ver"
+            }
 
         }
     }

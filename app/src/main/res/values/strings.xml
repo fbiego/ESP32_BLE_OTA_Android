@@ -21,4 +21,5 @@
     <string name="send">Send</string>
     <string name="save">Save</string>
     <string name="cancel">Cancel</string>
+    <string name="not_connect">Device not connected</string>
 </resources>
