@@ -72,71 +72,12 @@
     </androidx.cardview.widget.CardView>
 
     <androidx.cardview.widget.CardView
-        android:id="@+id/cardDevice"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:layout_marginBottom="5dp"
-        app:cardBackgroundColor="#EEF"
-        app:layout_constraintTop_toBottomOf="@id/cardInfo"
-        android:onClick="onClick">
-
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_margin="10dp">
-
-            <TextView
-                android:id="@+id/deviceVersion"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-
-                android:layout_weight="1"
-                android:text="v"
-                android:textSize="18sp" />
-            <ImageView
-                android:id="@+id/getInfo"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:src="@drawable/ic_download"
-                android:layout_marginStart="10dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:onClick="onClick"
-                app:tint="@color/design_default_color_primary" />
-
-            <ImageView
-                android:id="@+id/restart"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:src="@drawable/ic_start"
-                android:layout_marginStart="10dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:onClick="onClick"
-                app:tint="@color/design_default_color_primary" />
-
-            <ImageView
-                android:id="@+id/format"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:src="@drawable/ic_format"
-                android:layout_marginStart="10dp"
-                app:layout_constraintEnd_toEndOf="parent"
-                android:onClick="onClick"
-                app:tint="@color/design_default_color_primary" />
-
-        </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
-    <androidx.cardview.widget.CardView
         android:id="@+id/cardView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="10dp"
         app:cardBackgroundColor="#EEF"
-        app:layout_constraintTop_toBottomOf="@id/cardDevice"
+        app:layout_constraintTop_toBottomOf="@id/cardInfo"
         android:onClick="onClick">
 
         <LinearLayout

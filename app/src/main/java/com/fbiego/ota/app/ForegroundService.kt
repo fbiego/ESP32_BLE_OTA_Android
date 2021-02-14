@@ -449,7 +449,7 @@ class ForegroundService : Service(), DataListener {
             Toast.makeText(context, "Transfer Complete", Toast.LENGTH_SHORT).show()
             notifyProgress("Finishing up", 100, context)
             Handler().postDelayed({
-                //sendData(byteArrayOfInts(0xFE)) // send restart command
+                sendData(byteArrayOfInts(0xFE)) // send restart command
                 cancelNotification(SERVICE_ID2, context)
             }, 2000)
         }
@@ -461,12 +461,16 @@ class ForegroundService : Service(), DataListener {
 
 
 
-    private fun onProgress(progress: Int, context: Context){
+    private fun onProgress(progress: Int, context: Context) {
         var txt = context.getString(R.string.send_data)
-        notifyProgress(txt, progress, context)
-        if (progress == 100) {
-            txt = context.getString(R.string.transfer_complete)
+        if (MN.showNotif) {
             notifyProgress(txt, progress, context)
+            if (progress == 100) {
+                txt = context.getString(R.string.transfer_complete)
+                notifyProgress(txt, progress, context)
+            }
+        } else {
+            cancelNotification(SERVICE_ID2, context)
         }
         ProgressReceiver().getProgress(progress, txt)
     }

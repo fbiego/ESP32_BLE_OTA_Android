@@ -78,6 +78,8 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         const val UPDATE_FILE = "update.bin"
         var MTU = 48
 
+        var showNotif = false
+
         var textView: TextView? = null
     }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -138,6 +140,12 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             "no file"
         }
         textProgress.text = name
+        showNotif = false
+    }
+
+    override fun onPause() {
+        super.onPause()
+        showNotif = true
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -167,10 +175,10 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                     devs = getString(R.string.not_paired)
                     val devices: Set<BluetoothDevice> = btAdapter.bondedDevices
                     for (device in devices) {
-                            if (device.name.contains("ESP")) {
-                                btNames.add(device.name)
-                                btAddress.add(device.address)
-                            }
+                        if (device.name.contains("ESP")) {
+                            btNames.add(device.name)
+                            btAddress.add(device.address)
+                        }
                     }
 
                 } else {
@@ -269,6 +277,8 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                 val parts = generate()
                 FG.parts = parts
                 if (FG().sendData(byteArrayOfInts(0xFD))) {
+                    Toast.makeText(this, "Uploading file", Toast.LENGTH_SHORT).show()
+                    buttonUpload.visibility = View.INVISIBLE
                     FG().sendData(
                         byteArrayOfInts(
                             0xFF,
@@ -290,23 +300,6 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             R.id.cardView -> {
                 //FG().sendData(byteArrayOfInts(0xFE))
 
-            }
-            R.id.getInfo -> {
-
-            }
-            R.id.format -> {
-                if (FG().sendData(byteArrayOfInts(0xFD))) {
-                    Toast.makeText(this, "Formatting SPIFFS", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
-                }
-            }
-            R.id.restart -> {
-                if (FG().sendData(byteArrayOfInts(0xFE))) {
-                    Toast.makeText(this, "Restarting", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
-                }
             }
         }
 
@@ -468,6 +461,9 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             textProgress.text = text
             progressUpload.progress = progress
             percentProgress.text = "$progress%"
+            if (progress == 100) {
+                buttonUpload.visibility = View.VISIBLE
+            }
         }
     }
 
