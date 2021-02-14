@@ -43,6 +43,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ListView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -60,21 +61,24 @@ import java.io.IOException
 import com.fbiego.ota.app.ForegroundService as FG
 
 
-class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, DataListener {
+class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
     private lateinit var menu: Menu
     private lateinit var editor: SharedPreferences.Editor
     private lateinit var setPref: SharedPreferences
 
 
-
     companion object {
         const val PREF_KEY_REMOTE_MAC_ADDRESS = "pref_remote_mac_address"
         const val PREF_CURRENT_FILE = "pref_file_name"
+        const val PREF_MTU = "pref_mtu"
         lateinit var btAdapter: BluetoothAdapter
         const val BLUETOOTH = 37
         const val STORAGE = 20
         const val FILE_PICK = 56
         const val UPDATE_FILE = "update.bin"
+        var MTU = 48
+
+        var textView: TextView? = null
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -85,9 +89,11 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
 
         ProgressReceiver.bindListener(this)
         ConnectionReceiver.bindListener(this)
-        DataReceiver.bindListener(this)
         btAdapter = BluetoothAdapter.getDefaultAdapter()
-        setPref =  PreferenceManager.getDefaultSharedPreferences(this)
+        setPref = PreferenceManager.getDefaultSharedPreferences(this)
+
+        textView = findViewById(R.id.watchName)
+        MTU = setPref.getInt(PREF_MTU, 48)
 
     }
 
@@ -271,6 +277,40 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
             }
             R.id.cardView -> {
                 //FG().sendData(byteArrayOfInts(0xFE))
+                clearData()
+                val parts = generate()
+                FG.parts = parts
+                if (FG().sendData(
+                        byteArrayOfInts(
+                            0xFF,
+                            parts / 256,
+                            parts % 256,
+                            MTU / 256,
+                            MTU % 256
+                        )
+                    )
+                ) {
+                    FG().sendData(this, 0)
+                } else {
+                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
+                }
+            }
+            R.id.getInfo -> {
+
+            }
+            R.id.format -> {
+                if (FG().sendData(byteArrayOfInts(0xFD))) {
+                    Toast.makeText(this, "Formatting SPIFFS", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
+                }
+            }
+            R.id.restart -> {
+                if (FG().sendData(byteArrayOfInts(0xFE))) {
+                    Toast.makeText(this, "Restarting", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -324,18 +364,76 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
         fos.flush()
         fos.close()
     }
-    
+
+    @Throws(IOException::class)
+    fun clearData() {
+        val directory = this.cacheDir
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+        val upload = File(directory, "data")
+        if (upload.exists()) {
+            upload.deleteRecursively()
+        }
+    }
+
+    @Throws(IOException::class)
+    fun saveData(byteArray: ByteArray, pos: Int) {
+        val directory = this.cacheDir
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+        val upload = File(directory, "data")
+        if (!upload.exists()) {
+            upload.mkdirs()
+        }
+        val data = File(upload, "data$pos.bin")
+        val fos = FileOutputStream(data, true)
+        fos.write(byteArray)
+        fos.flush()
+        fos.close()
+
+    }
+
+    @Throws(IOException::class)
+    fun generate(): Int {
+        val bytes = File(this.cacheDir, "update.bin").readBytes()
+        val s = bytes.size / 4096
+
+        for (x in 0 until s) {
+            val data = ByteArray(4096)
+            for (y in 0 until 4096) {
+                data[y] = bytes[(x * 4096) + y]
+            }
+            saveData(data, x)
+
+        }
+        if (bytes.size % 4096 != 0) {
+            val data = ByteArray(bytes.size % 4096)
+            for (y in 0 until bytes.size % 4096) {
+                data[y] = bytes[(s * 4096) + y]
+            }
+            saveData(data, s)
+        }
+        return if (bytes.size % 4096 == 0) {
+            (bytes.size / 4096)
+        } else {
+            (bytes.size / 4096) + 1
+        }
+    }
+
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         Timber.e("RequestCode= $requestCode, ResultCode= $resultCode, Data= ${data != null}")
-        if (resultCode == Activity.RESULT_OK){
-            if (data != null && requestCode == FILE_PICK){
+        if (resultCode == Activity.RESULT_OK) {
+            if (data != null && requestCode == FILE_PICK) {
 
                 val selectedFile = data.data
                 val filePathColumn = arrayOf(MediaStore.Files.FileColumns.DATA)
                 if (selectedFile != null) {
-                    val cursor = contentResolver.query(selectedFile, filePathColumn, null, null, null)
+                    val cursor =
+                        contentResolver.query(selectedFile, filePathColumn, null, null, null)
                     if (cursor != null) {
                         cursor.moveToFirst()
                         val columnIndex = cursor.getColumnIndex(filePathColumn[0])
@@ -358,14 +456,12 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener, 
         }
     }
 
-    override fun onDataReceived(data: Data) {
+    fun onDataReceived(data: Data) {
         Timber.e("${data.getByte(0)}")
-        runOnUiThread {
-            if (data.getByte(0) == (0xFA).toByte()){
-                val ver = String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
-                watchName.text = "${FG.deviceName}\t$ver"
-            }
-
+        if (data.getByte(0) == (0xFA).toByte()) {
+            val ver =
+                String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
+            textView?.text = "${FG.deviceName}\t$ver"
         }
     }
 

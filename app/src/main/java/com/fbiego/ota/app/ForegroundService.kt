@@ -72,6 +72,7 @@ class ForegroundService : Service(), DataListener {
 
         var connected = false
         var prt = 0
+        var parts = 0
 
 
     }
@@ -438,7 +439,12 @@ class ForegroundService : Service(), DataListener {
     @RequiresApi(Build.VERSION_CODES.P)
     override fun onDataReceived(data: Data) {
 
+        if (data.getByte(0) == (0xF1).toByte()) {
+            val next = ((data.getByte(1)!!.toPInt()) * 256) + (data.getByte(2)!!.toPInt())
+            sendData(context, next)
+        }
 
+        MN().onDataReceived(data)
 
     }
 
@@ -492,12 +498,45 @@ class ForegroundService : Service(), DataListener {
         }
 
         Timber.e("Transfer complete")
-        notifyProgress("Finishing up",  100, context)
+        notifyProgress("Finishing up", 100, context)
         Handler().postDelayed({
             sendData(byteArrayOfInts(0xFE)) // send restart command
             cancelNotification(SERVICE_ID2, context)
         }, 2000)
 
+    }
+
+    @Throws(IOException::class)
+    fun sendData(context: Context, pos: Int) {
+        val dir = File(context.cacheDir, "data")
+        val data = File(dir, "data$pos.bin").readBytes()
+        val s = MN.MTU
+        val total = data.size / s
+
+        for (x in 0 until total) {
+            val arr = ByteArray(s + 2)
+            arr[0] = (0xFB).toByte()
+            arr[1] = x.toByte()
+            for (y in 0 until s) {
+                arr[y + 2] = data[(x * s) + y]
+            }
+            sendData(arr)
+        }
+
+        if (data.size % s != 0) {
+            val arr = ByteArray((data.size % s) + 2)
+            arr[0] = (0xFB).toByte()
+            arr[1] = total.toByte()
+            for (y in 0 until data.size % s) {
+                arr[y + 2] = data[(total * s) + y]
+            }
+            sendData(arr)
+        }
+
+        val update = byteArrayOfInts(0xFC, data.size / 256, data.size % 256, pos / 256, pos % 256)
+        sendData(update)
+        val cur = ((pos.toFloat() / parts) * 100).toInt()
+        transmitData(update, cur, context)
     }
 
 }
