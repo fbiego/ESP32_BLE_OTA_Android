@@ -11,6 +11,6 @@ Android app to perform OTA update on ESP32 via BLE
 4. Send a command specifying the number of parts and MTU size
 5. Send the first part to the board
 6. Send a command indicating copmletion of the part along with the number of bytes (this will trigger writing to the update.bin file along with a request to the next part)
-7. Receive request of a part specifying the part number (repeat 5 & 6)
+7. Receive request of a part specifying the part number (repeat 5, 6 & 7)
 8. After all parts have been sent trigger a restart in order to apply the update
 
