@@ -445,7 +445,7 @@ class ForegroundService : Service(), DataListener {
             sendData(context, next)
         }
         if (data.getByte(0) == (0xF2).toByte()) {
-            Timber.e("Transfer complete")
+            Timber.w("Transfer complete")
             Toast.makeText(context, "Transfer Complete", Toast.LENGTH_SHORT).show()
             notifyProgress("Finishing up", 100, context)
             Handler().postDelayed({
@@ -480,7 +480,7 @@ class ForegroundService : Service(), DataListener {
     fun sendData(context: Context, pos: Int) {
         val dir = File(context.cacheDir, "data")
         val data = File(dir, "data$pos.bin").readBytes()
-        val s = MN.MTU
+        val s = MN.mtu
         val total = data.size / s
 
         for (x in 0 until total) {

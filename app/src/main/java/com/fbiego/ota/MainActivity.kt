@@ -47,6 +47,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
 import androidx.preference.PreferenceManager
 import com.fbiego.ota.app.*
@@ -76,11 +77,13 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         const val STORAGE = 20
         const val FILE_PICK = 56
         const val UPDATE_FILE = "update.bin"
-        var MTU = 48
+        const val PART = 16384
+        var mtu = 98
 
         var showNotif = false
 
         var textView: TextView? = null
+        var cardUpload: CardView? = null
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,7 +98,8 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         setPref = PreferenceManager.getDefaultSharedPreferences(this)
 
         textView = findViewById(R.id.watchName)
-        MTU = setPref.getInt(PREF_MTU, 48)
+        cardUpload = findViewById(R.id.buttonUpload)
+        mtu = setPref.getInt(PREF_MTU, mtu)
 
     }
 
@@ -136,7 +140,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                 "no file"
             }
         } else {
-            buttonUpload.visibility = View.GONE
+            buttonUpload.visibility = View.INVISIBLE
             "no file"
         }
         textProgress.text = name
@@ -280,13 +284,13 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                     Toast.makeText(this, "Uploading file", Toast.LENGTH_SHORT).show()
                     buttonUpload.visibility = View.INVISIBLE
                     FG().sendData(
-                        byteArrayOfInts(
-                            0xFF,
-                            parts / 256,
-                            parts % 256,
-                            MTU / 256,
-                            MTU % 256
-                        )
+                            byteArrayOfInts(
+                                    0xFF,
+                                    parts / 256,
+                                    parts % 256,
+                                    mtu / 256,
+                                    mtu % 256
+                            )
                     )
                     FG().sendData(this, 0)
                 } else {
@@ -317,9 +321,9 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
 
     private fun requestExternal(){
         ActivityCompat.requestPermissions(
-            this,
-            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
-            56
+                this,
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE),
+                STORAGE
         )
     }
 
@@ -387,27 +391,27 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
     @Throws(IOException::class)
     fun generate(): Int {
         val bytes = File(this.cacheDir, "update.bin").readBytes()
-        val s = bytes.size / 4096
+        val s = bytes.size / PART
 
         for (x in 0 until s) {
-            val data = ByteArray(4096)
-            for (y in 0 until 4096) {
-                data[y] = bytes[(x * 4096) + y]
+            val data = ByteArray(PART)
+            for (y in 0 until PART) {
+                data[y] = bytes[(x * PART) + y]
             }
             saveData(data, x)
 
         }
-        if (bytes.size % 4096 != 0) {
-            val data = ByteArray(bytes.size % 4096)
-            for (y in 0 until bytes.size % 4096) {
-                data[y] = bytes[(s * 4096) + y]
+        if (bytes.size % PART != 0) {
+            val data = ByteArray(bytes.size % PART)
+            for (y in 0 until bytes.size % PART) {
+                data[y] = bytes[(s * PART) + y]
             }
             saveData(data, s)
         }
-        return if (bytes.size % 4096 == 0) {
-            (bytes.size / 4096)
+        return if (bytes.size % PART == 0) {
+            (bytes.size / PART)
         } else {
-            (bytes.size / 4096) + 1
+            (bytes.size / PART) + 1
         }
     }
 
@@ -449,8 +453,11 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         Timber.e("${data.getByte(0)}")
         if (data.getByte(0) == (0xFA).toByte()) {
             val ver =
-                String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
+                    String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
             textView?.text = "${FG.deviceName}\t$ver"
+        }
+        if (data.getByte(0) == (0xF2).toByte()) {
+            cardUpload?.visibility = View.VISIBLE
         }
     }
 
