@@ -39,14 +39,6 @@ android {
                 keyPassword KEY_PASSWORD
             }
         }
-        release {
-            if (project.hasProperty(STORE_FILE)){
-                storeFile file(STORE_FILE)
-                storePassword STORE_PASSWORD
-                keyAlias = KEY_ALIAS
-                keyPassword KEY_PASSWORD
-            }
-        }
     }
     compileSdkVersion 29
 
@@ -73,6 +65,12 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
     }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "BLE-OTA-v${defaultConfig.versionName}.apk"
+        }
+    }
 }
 
 dependencies {
@@ -84,7 +82,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     implementation 'com.jakewharton.timber:timber:4.7.1'
     implementation 'androidx.preference:preference-ktx:1.1.1'
-    testImplementation 'junit:junit:4.13.1'
+    testImplementation 'junit:junit:4.13.2'
     implementation project(':ble')
     androidTestImplementation 'androidx.test.ext:junit:1.1.2'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
