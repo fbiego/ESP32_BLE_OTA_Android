@@ -191,11 +191,7 @@ class LEManager(context: Context) : BleManager<LeManagerCallbacks>(context) {
         override fun initialize() {
             Timber.d("Initialising...")
 
-
-
-
             requestMtu(MTU).enqueue()
-
 
             setNotificationCallback(otaRxCharacteristic)
                 .with { device, data ->
