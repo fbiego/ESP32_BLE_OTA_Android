@@ -6,7 +6,7 @@ Android app to perform OTA update on ESP32 via BLE
 
 ## Transfer Sequence
 1. Choose the binary file to be sent
-2. Split the file into parts (4096 bytes each)
+2. Split the file into parts (16384 bytes each)
 3. Send a command to format the SPIFFS 
 4. Send a command specifying the number of parts and MTU size
 5. Send the first part to the board
