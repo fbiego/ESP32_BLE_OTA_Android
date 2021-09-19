@@ -74,6 +74,7 @@ class ForegroundService : Service(), DataListener {
         var connected = false
         var prt = 0
         var parts = 0
+        var fastMode = false
 
 
     }
@@ -144,7 +145,7 @@ class ForegroundService : Service(), DataListener {
 
     fun sendData(data: ByteArray): Boolean{
         return if (bleManager != null) {
-            (bleManager as LEManager).writeBytes(data)
+            (bleManager as LEManager).writeBytes(fastMode, data)
         } else {
             false
         }
@@ -153,7 +154,7 @@ class ForegroundService : Service(), DataListener {
 
     private fun transmitData(data: ByteArray, progress: Int, context: Context): Boolean{
         return if (bleManager != null) {
-            (bleManager as LEManager).transmitData(data, progress, context, this@ForegroundService::onProgress)
+            (bleManager as LEManager).transmitData(fastMode, data, progress, context, this@ForegroundService::onProgress)
         } else {
             false
         }
@@ -444,20 +445,49 @@ class ForegroundService : Service(), DataListener {
             val next = ((data.getByte(1)!!.toPInt()) * 256) + (data.getByte(2)!!.toPInt())
             sendData(context, next)
         }
+        if (data.getByte(0) == (0xAA).toByte()){
+            fastMode = data.getByte(1) == (0x01).toByte()
+            Toast.makeText(context, "Fastmode: $fastMode", Toast.LENGTH_SHORT).show()
+            if (fastMode) {
+                uploadData(context)
+            } else {
+                sendData(context, 0)
+            }
+        }
         if (data.getByte(0) == (0xF2).toByte()) {
             Timber.w("Transfer complete")
             Toast.makeText(context, "Transfer Complete", Toast.LENGTH_SHORT).show()
             notifyProgress("Finishing up", 100, context)
+            ProgressReceiver().getProgress(100, "Transfer Complete")
             Handler().postDelayed({
                 sendData(byteArrayOfInts(0xFE)) // send restart command
                 cancelNotification(SERVICE_ID2, context)
             }, 2000)
+        }
+        if (data.getByte(0) == (0x0F).toByte()){
+            val textArray = ByteArray(data.size()-1)
+            for (x in 1 until data.size()){
+                textArray[x-1] = data.getByte(x)!!
+            }
+            Timber.e(String(textArray))
+            ProgressReceiver().getProgress(101, String(textArray))
         }
 
         MN().onDataReceived(data)
 
     }
 
+    fun uploadData(context: Context){
+        var current = 0
+        val thread = Thread {
+            while (current < parts){
+                sendData(context, current)
+                current++
+            }
+        }
+        thread.start()
+
+    }
 
 
 

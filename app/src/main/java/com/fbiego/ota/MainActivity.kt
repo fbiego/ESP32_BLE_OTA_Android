@@ -28,37 +28,49 @@ import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
+import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
+import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.ParcelUuid
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ListView
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
+import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
 import androidx.core.app.ActivityCompat
+import androidx.core.net.toFile
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.fbiego.ota.app.*
+import com.fbiego.ota.ble.LEManager
+import com.fbiego.ota.data.BtDevice
 import com.fbiego.ota.data.BtListAdapter
 import kotlinx.android.synthetic.main.activity_main.*
 import no.nordicsemi.android.ble.data.Data
 import timber.log.Timber
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.IOException
+import java.io.*
+import java.util.*
+import kotlin.collections.ArrayList
 import com.fbiego.ota.app.ForegroundService as FG
 
 
@@ -66,6 +78,25 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
     private lateinit var menu: Menu
     private lateinit var editor: SharedPreferences.Editor
     private lateinit var setPref: SharedPreferences
+
+    private var deviceList = ArrayList<BtDevice>()
+    private var deviceAdapter = BtListAdapter(
+            deviceList,
+            deviceAddress,
+            this@MainActivity::selectedDevice
+    )
+    private var mScanning: Boolean = false
+    private lateinit var alertDialog: AlertDialog
+
+    private val bluetoothAdapter: BluetoothAdapter by lazy(LazyThreadSafetyMode.NONE) {
+        val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+        bluetoothManager.adapter
+    }
+    lateinit var textView: TextView
+    lateinit var cardUpload: CardView
+    lateinit var progress: ProgressBar
+    lateinit var button: Button
+
 
 
     companion object {
@@ -77,13 +108,23 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         const val STORAGE = 20
         const val FILE_PICK = 56
         const val UPDATE_FILE = "update.bin"
+        private const val FINE_LOCATION_PERMISSION_REQUEST= 1001
+        const val BACKGROUND_LOCATION = 67
         const val PART = 16384
-        var mtu = 98
+        var mtu = 500
 
         var showNotif = false
+        var deviceAddress = ""
 
-        var textView: TextView? = null
-        var cardUpload: CardView? = null
+        lateinit var deviceRecycler: RecyclerView
+
+        var start = 0L
+        var startOta = 0L
+        var timeTr = 0L
+        var timeOta = 0L
+
+
+        var total = 0
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,6 +137,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         ConnectionReceiver.bindListener(this)
         btAdapter = BluetoothAdapter.getDefaultAdapter()
         setPref = PreferenceManager.getDefaultSharedPreferences(this)
+        deviceAddress = setPref.getString(PREF_KEY_REMOTE_MAC_ADDRESS, FG.VESPA_DEVICE_ADDRESS).toString()
 
         textView = findViewById(R.id.watchName)
         cardUpload = findViewById(R.id.buttonUpload)
@@ -107,17 +149,17 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         super.onStart()
 
         Timber.d("MainActivity on start")
-        val remoteMacAddress = setPref.getString(
-            PREF_KEY_REMOTE_MAC_ADDRESS,
-            FG.VESPA_DEVICE_ADDRESS
-        )
+        deviceAddress = setPref.getString(
+                PREF_KEY_REMOTE_MAC_ADDRESS,
+                FG.VESPA_DEVICE_ADDRESS
+        ).toString()
         if (btAdapter.isEnabled){
 
-            if (remoteMacAddress != FG.VESPA_DEVICE_ADDRESS){
+            if (deviceAddress!= FG.VESPA_DEVICE_ADDRESS){
                 startService(Intent(this, FG::class.java))
 
             } else {
-                Toast.makeText(this, "Setup mac address first", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Select a device first", Toast.LENGTH_SHORT).show()
             }
 
         }
@@ -158,74 +200,62 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         return super.onCreateOptionsMenu(menu)
     }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.menu_item_prefs -> {
 
                 Toast.makeText(this, R.string.stop_service, Toast.LENGTH_SHORT).show()
                 stopService(Intent(this, FG::class.java))
-                val mac = setPref.getString(
-                    PREF_KEY_REMOTE_MAC_ADDRESS,
-                    FG.VESPA_DEVICE_ADDRESS
+
+                val inflater = layoutInflater
+                val layout = inflater.inflate(R.layout.search_dialog, null)
+                deviceRecycler = layout.findViewById(R.id.devicesView)
+                button = layout.findViewById(R.id.search)
+                progress = layout.findViewById(R.id.progressBar)
+                textView = layout.findViewById(R.id.textView)
+                progress.isIndeterminate = true
+                button.setOnClickListener {
+                    deviceList.clear()
+                    updateDevices()
+                    scanLeDevice(true)
+                }
+                deviceRecycler.layoutManager = LinearLayoutManager(this)
+                val div = DividerItemDecoration(
+                        deviceRecycler.context,
+                        LinearLayoutManager.VERTICAL
                 )
-                editor = setPref.edit()
-                val alert = AlertDialog.Builder(this)
-                var alertDialog: AlertDialog? = null
-                alert.setTitle(R.string.mac_addr)
-                val devs: String
-                val btNames = ArrayList<String>()
-                val btAddress = ArrayList<String>()
-                if (btAdapter.isEnabled) {
-                    devs = getString(R.string.not_paired)
-                    val devices: Set<BluetoothDevice> = btAdapter.bondedDevices
-                    for (device in devices) {
-                        if (device.name.contains("ESP")) {
-                            btNames.add(device.name)
-                            btAddress.add(device.address)
+                deviceRecycler.addItemDecoration(div)
+                deviceRecycler.isNestedScrollingEnabled = false
+                deviceRecycler.apply {
+                    layoutManager = LinearLayoutManager(this@MainActivity)
+                    adapter = deviceAdapter
+                }
+                deviceRecycler.itemAnimator?.changeDuration = 0
+
+                if (!checkLocation()){
+                    requestLocation()
+                } else {
+                    if (!checkFINE()){
+                        requestBackground()
+                    } else {
+                        if (bluetoothAdapter.isEnabled) {
+                            scanLeDevice(true) //make sure scan function won't be called several times
                         }
                     }
-
-                } else {
-                    devs = getString(R.string.turn_on_bt)
                 }
-                alert.setMessage(devs)
-                val layout = LinearLayout(this)
-                layout.layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
 
-                val listView = ListView(this)
-                val myBTlist = BtListAdapter(
-                    this,
-                    btNames.toTypedArray(),
-                    btAddress.toTypedArray(),
-                    mac!!
-                )
-                listView.adapter = myBTlist
+                val dialog = AlertDialog.Builder(this)
 
-                listView.setOnItemClickListener { _, _, j, _ ->
-                    editor.putString(PREF_KEY_REMOTE_MAC_ADDRESS, btAddress[j])
-                    editor.apply()
-                    editor.commit()
-                    alertDialog?.dismiss()
-                }
-                val params = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                )
-                params.setMargins(20, 20, 20, 20)
-                layout.addView(listView, params)
-                alert.setView(layout)
-                alert.setPositiveButton(R.string.bt_settings) { _, _ ->
-                    val intentOpenBluetoothSettings = Intent()
-                    intentOpenBluetoothSettings.action = Settings.ACTION_BLUETOOTH_SETTINGS
-                    startActivity(intentOpenBluetoothSettings)
-                }
-                alert.setNegativeButton(R.string.cancel) { _, _ ->
+                //dialog.setTitle("Scan")
+                //dialog.setMessage("Searching")
+                dialog.setView(layout)
 
+                dialog.setOnDismissListener {
+                    Timber.e("Dialog dismissed")
                 }
-                alertDialog = alert.create()
+
+                alertDialog = dialog.create()
                 alertDialog.show()
                 true
             }
@@ -238,8 +268,8 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             R.id.menu_item_start -> {
 
                 val remoteMacAddress = setPref.getString(
-                    PREF_KEY_REMOTE_MAC_ADDRESS,
-                    FG.VESPA_DEVICE_ADDRESS
+                        PREF_KEY_REMOTE_MAC_ADDRESS,
+                        FG.VESPA_DEVICE_ADDRESS
                 )
                 if (btAdapter.isEnabled) {
                     if (remoteMacAddress != FG.VESPA_DEVICE_ADDRESS) {
@@ -247,7 +277,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                         Toast.makeText(this, R.string.start_service, Toast.LENGTH_SHORT).show()
                         startService(Intent(this, FG::class.java))
                     } else {
-                        Toast.makeText(this, "Setup mac address first", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Select a device first", Toast.LENGTH_SHORT).show()
                     }
 
                 } else {
@@ -258,6 +288,173 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                 true
             }
             else -> super.onOptionsItemSelected(item)
+        }
+
+    }
+
+    override fun onRequestPermissionsResult(
+            requestCode: Int,
+            permissions: Array<String>, grantResults: IntArray
+    ) {
+        when (requestCode) {
+            FINE_LOCATION_PERMISSION_REQUEST -> {
+                if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                    scanLeDevice(true)
+                } else {
+                    //tvTestNote.text= getString(R.string.allow_location_detection)
+                }
+                return
+            }
+            STORAGE -> {
+                if ((grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED)) {
+                    var chooseFile = Intent(Intent.ACTION_GET_CONTENT)
+                    chooseFile.type = "*/*"
+                    chooseFile = Intent.createChooser(chooseFile, "Choose a file")
+                    startActivityForResult(chooseFile, 20)
+                } else {
+                    //tvTestNote.text= getString(R.string.allow_location_detection)
+                }
+                return
+            }
+        }
+    }
+
+    private fun checkLocation(): Boolean {
+        if (ActivityCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
+                this@MainActivity,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return true
+    }
+
+    private fun requestLocation(){
+        ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION),
+                FINE_LOCATION_PERMISSION_REQUEST
+        )
+    }
+
+    private fun scanLeDevice(enable: Boolean) {
+        when (enable) {
+            true -> {
+                // Stops scanning after a pre-defined scan period.
+                Handler().postDelayed({
+                    mScanning = false
+                    progress.isIndeterminate = false
+                    button.visibility = View.VISIBLE
+                    bluetoothAdapter.bluetoothLeScanner?.stopScan(mLeScanCallback)
+                }, 10000)
+                mScanning = true
+                progress.isIndeterminate = true
+                button.visibility = View.GONE
+                textView.text = "Searching for devices"
+                val filter =
+                        ScanFilter.Builder().setServiceUuid(ParcelUuid(LEManager.OTA_SERVICE_UUID))
+                                .build()
+                val filters = mutableListOf<ScanFilter>(filter)
+                val settings = ScanSettings.Builder()
+                        .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                        .setReportDelay(0)
+                        .build()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q){
+                    bluetoothAdapter.bluetoothLeScanner?.startScan(
+                        mLeScanCallback
+                    )
+                } else {
+                    bluetoothAdapter.bluetoothLeScanner?.startScan(
+                        filters,
+                        settings,
+                        mLeScanCallback
+                    )
+                }
+            }
+            else -> {
+                mScanning = false
+                progress.isIndeterminate = false
+                button.visibility = View.VISIBLE
+                bluetoothAdapter.bluetoothLeScanner?.stopScan(mLeScanCallback)
+            }
+        }
+
+    }
+
+    fun updateDevices(){
+        textView.text = if (deviceList.isNotEmpty()){
+            "Found ${deviceList.size} device${if (deviceList.size > 1) "s" else ""}"
+        } else {
+            "No device found"
+        }
+        deviceAdapter.update(deviceList, deviceAddress)
+    }
+
+    private fun selectedDevice(device: BtDevice){
+        scanLeDevice(false)
+        deviceAddress = device.address
+        setPref.edit().putString(PREF_KEY_REMOTE_MAC_ADDRESS, deviceAddress).apply()
+        Timber.e("Selected: ${device.name}, address: ${device.address}, device: address")
+        alertDialog.dismiss()
+        if (!isBonded(device)){
+            Timber.e("bonding device")
+            createBond(device)
+        } else {
+            Timber.e("Already bonded")
+        }
+        Handler().postDelayed({
+            startService(Intent(this, FG::class.java))
+        }, 5000
+        )
+
+    }
+
+    private fun createBond(btDev: BtDevice){
+        bluetoothAdapter.getRemoteDevice(btDev.address).createBond()
+    }
+
+    private fun isBonded(btDev: BtDevice): Boolean{
+        for (dev in bluetoothAdapter.bondedDevices){
+            if (dev.address == btDev.address){
+                return true
+            }
+        }
+        return false
+    }
+
+    private var mLeScanCallback = object : ScanCallback(){
+        override fun onScanResult(callbackType: Int, result: ScanResult?) {
+            super.onScanResult(callbackType, result)
+            Timber.e("Callback: $callbackType, Result ${result?.device?.name}")
+            val me: BtDevice? = deviceList.singleOrNull {
+                it.address == result?.device?.address
+            }
+            if (me == null && result?.device?.name != null){
+                deviceList.add(BtDevice(result.device.name, result.device.address, false))
+            }
+            updateDevices()
+        }
+
+        override fun onBatchScanResults(results: MutableList<ScanResult?>?) {
+            super.onBatchScanResults(results)
+            Timber.e("Scan results: $results")
+            for (result in results!!){
+                val me: BtDevice? = deviceList.singleOrNull {
+                    it.address == result?.device?.address
+                }
+                if (me == null && result?.device?.name != null){
+                    deviceList.add(BtDevice(result.device?.name!!, result.device.address, false))
+                }
+            }
+            updateDevices()
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            super.onScanFailed(errorCode)
+            Timber.e("Scan Fail: error $errorCode")
         }
 
     }
@@ -277,6 +474,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             }
 
             R.id.buttonUpload -> {
+                startOta = System.currentTimeMillis()
                 clearData()
                 val parts = generate()
                 FG.parts = parts
@@ -292,7 +490,9 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                                     mtu % 256
                             )
                     )
-                    FG().sendData(this, 0)
+                    //FG().sendData(this, 0)
+                    start = System.currentTimeMillis()
+                    //
                 } else {
                     Toast.makeText(this, R.string.not_connect, Toast.LENGTH_SHORT).show()
                 }
@@ -301,8 +501,9 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             R.id.cardInfo -> {
                 //FG().sendData(byteArrayOfInts(0xFD))
             }
-            R.id.cardView -> {
+            R.id.cardView -> {  // with progress
                 //FG().sendData(byteArrayOfInts(0xFE))
+
 
             }
         }
@@ -311,12 +512,31 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
 
     private fun checkExternal(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && ActivityCompat.checkSelfPermission(
+                        this@MainActivity,
+                        Manifest.permission.READ_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED) {
+            return false
+        }
+        return true
+    }
+
+    private fun checkFINE(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && ActivityCompat.checkSelfPermission(
                 this@MainActivity,
-                Manifest.permission.READ_EXTERNAL_STORAGE
+                Manifest.permission.ACCESS_FINE_LOCATION
             ) != PackageManager.PERMISSION_GRANTED) {
             return false
         }
         return true
+    }
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun requestBackground(){
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+            BACKGROUND_LOCATION
+        )
     }
 
     private fun requestExternal(){
@@ -328,7 +548,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
     }
 
     @Throws(IOException::class)
-    fun saveFile(src: File) {
+    fun saveFile(src: File?, uri: Uri?) {
 
         val directory = this.cacheDir
         if (!directory.exists()) {
@@ -340,22 +560,42 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             dst.delete()
 
         }
-        val info = File(directory, "info.txt")
-        info.writeText(src.name)
+        if (src != null) {
+            val info = File(directory, "info.txt")
+            info.writeText(src.name)
 
-        FileInputStream(src).use { `in` ->
-            FileOutputStream(dst).use { out ->
-                // Transfer bytes from in to out
-                val buf = ByteArray(1024)
-                var len: Int
-                while (`in`.read(buf).also { len = it } > 0) {
-                    out.write(buf, 0, len)
+            FileInputStream(src).use { `in` ->
+                FileOutputStream(dst).use { out ->
+                    // Transfer bytes from in to out
+                    val buf = ByteArray(1024)
+                    var len: Int
+                    while (`in`.read(buf).also { len = it } > 0) {
+                        out.write(buf, 0, len)
+                    }
                 }
             }
+            val fos = FileOutputStream(dst, true)
+            fos.flush()
+            fos.close()
         }
-        val fos = FileOutputStream(dst, true)
-        fos.flush()
-        fos.close()
+        if (uri != null){
+            val info = File(directory, "info.txt")
+            info.writeText("firmware.bin")
+
+            contentResolver.openInputStream(uri).use { `in` ->
+                FileOutputStream(dst).use { out ->
+                    // Transfer bytes from in to out
+                    val buf = ByteArray(1024)
+                    var len: Int
+                    while (`in`!!.read(buf).also { len = it } > 0) {
+                        out.write(buf, 0, len)
+                    }
+                }
+            }
+            val fos = FileOutputStream(dst, true)
+            fos.flush()
+            fos.close()
+        }
     }
 
     @Throws(IOException::class)
@@ -430,21 +670,22 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                     if (cursor != null) {
                         cursor.moveToFirst()
                         val columnIndex = cursor.getColumnIndex(filePathColumn[0])
+
+                        //Timber.e(filePathColumn.contentDeepToString())
+                        //Timber.e("index = $columnIndex")
                         val filePath = cursor.getString(columnIndex)
 
-                        val f = File(filePath)
+                        //val f = File(filePath)
                         cursor.close()
 
-                        saveFile(f)
+                        //saveFile(f)
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q){
+                            saveFile(File(filePath), null)
+                        } else {
+                            saveFile(null, selectedFile)
+                        }
                     }
                 }
-            }
-
-            if (requestCode == STORAGE){
-                var chooseFile = Intent(Intent.ACTION_GET_CONTENT)
-                chooseFile.type = "*/*"
-                chooseFile = Intent.createChooser(chooseFile, "Choose a file")
-                startActivityForResult(chooseFile, 20)
             }
         }
     }
@@ -454,10 +695,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         if (data.getByte(0) == (0xFA).toByte()) {
             val ver =
                     String.format("v%01d.%02d", data.getByte(1)!!.toPInt(), data.getByte(2)!!.toPInt())
-            textView?.text = "${FG.deviceName}\t$ver"
-        }
-        if (data.getByte(0) == (0xF2).toByte()) {
-            cardUpload?.visibility = View.VISIBLE
+            textView.text = "${FG.deviceName}\t$ver"
         }
     }
 
@@ -470,6 +708,15 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
             percentProgress.text = "$progress%"
             if (progress == 100) {
                 buttonUpload.visibility = View.VISIBLE
+                progressUpload.isIndeterminate= true
+                timeTr = System.currentTimeMillis() - start
+                textProgress.text = "Transfer complete in ${timeString(timeTr)}\nInstalling..."
+            }
+            if (progress == 101){
+                timeOta = System.currentTimeMillis() - startOta
+                cardUpload.visibility = View.VISIBLE
+                percentProgress.text = ""
+                textProgress.text = text + "\nFile transfer time: ${timeString(timeTr)}\nTotal OTA time: ${timeString(timeOta)}"
             }
         }
     }

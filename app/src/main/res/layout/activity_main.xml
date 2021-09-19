@@ -58,6 +58,7 @@
 
                 android:layout_weight="1"
                 android:text="Device Name"
+                android:textStyle="bold"
                 android:textSize="18sp" />
 
             <ImageView
@@ -96,6 +97,8 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="7"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
                     android:text="Progress" />
 
                 <TextView
@@ -104,6 +107,8 @@
                     android:layout_height="wrap_content"
                     android:layout_weight="3"
                     android:text=""
+                    android:textSize="16sp"
+                    android:textStyle="bold"
                     android:textAlignment="textEnd" />
             </LinearLayout>
 
@@ -113,6 +118,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="3"
+                android:indeterminateTint="@color/purple_700"
+                android:progressTint="@color/purple_700"
+                android:scaleY="3"
                 android:max="100" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>

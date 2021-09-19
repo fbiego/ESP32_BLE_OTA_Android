@@ -21,7 +21,7 @@
     <item android:id="@+id/menu_item_prefs"
         android:title="@string/settings"
         android:contentDescription="@string/settings"
-        android:icon="@drawable/ic_settings"
+        android:icon="@drawable/ic_device"
         android:orderInCategory="100"
         app:showAsAction="ifRoom"
         />

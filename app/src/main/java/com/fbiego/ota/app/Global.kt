@@ -24,11 +24,17 @@
 
 package com.fbiego.ota.app
 
+import android.content.Context
 import androidx.core.app.NotificationCompat
+import com.fbiego.ota.MainActivity
+import timber.log.Timber
+import java.io.File
+import java.io.FileInputStream
 
 fun Byte.toPInt() = toInt() and 0xFF
 
-fun byteArrayOfInts(vararg ints: Int) = ByteArray(ints.size) { pos -> ints[pos].toByte()
+fun byteArrayOfInts(vararg ints: Int) = ByteArray(ints.size) {
+    pos -> ints[pos].toByte()
 }
 
 fun priority(pr: Int): Int{
@@ -39,5 +45,20 @@ fun priority(pr: Int): Int{
         3 -> NotificationCompat.PRIORITY_HIGH
         4 -> NotificationCompat.PRIORITY_MAX
         else -> NotificationCompat.PRIORITY_DEFAULT
+    }
+}
+
+fun timeString(millis: Long): String{
+    val sec = millis/1000
+    return when {
+        sec >= 3600 -> {
+            "${sec/3600}h ${(sec%3600)/60}m "
+        }
+        sec >= 60 -> {
+            "${sec/60}m ${sec%60}s"
+        }
+        else -> {
+            "${sec}s"
+        }
     }
 }

@@ -10,9 +10,9 @@
     {
       "type": "SINGLE",
       "filters": [],
-      "versionCode": 1,
-      "versionName": "1.0",
-      "outputFile": "BLE-OTA-v1.0.apk"
+      "versionCode": 5,
+      "versionName": "1.4",
+      "outputFile": "BLE-OTA-v1.4.apk"
     }
   ]
 }

@@ -44,7 +44,7 @@ class LEManager(context: Context) : BleManager<LeManagerCallbacks>(context) {
 
 
     companion object {
-        const val MTU = 500
+        const val MTU = 512
         val OTA_SERVICE_UUID:      UUID = UUID.fromString("fb1e4001-54ae-4a28-9f74-dfccb248601d")
         val OTA_TX_CHARACTERISTIC: UUID = UUID.fromString("fb1e4002-54ae-4a28-9f74-dfccb248601d")
         val OTA_RX_CHARACTERISTIC: UUID = UUID.fromString("fb1e4003-54ae-4a28-9f74-dfccb248601d")
@@ -66,10 +66,10 @@ class LEManager(context: Context) : BleManager<LeManagerCallbacks>(context) {
      */
 
 
-    fun transmitData(bytes: ByteArray, progress: Int, context: Context, listener: (Int, Context) -> Unit): Boolean{
+    fun transmitData(fastMode: Boolean, bytes: ByteArray, progress: Int, context: Context, listener: (Int, Context) -> Unit): Boolean{
         return if (isConnected && isReady && otaTxCharacteristic != null){
             requestMtu(MTU).enqueue()
-            writeCharacteristic(otaTxCharacteristic, bytes)
+            val send = writeCharacteristic(otaTxCharacteristic, bytes)
                 .with { device, data ->
                     Timber.d("Data sent to ${device.address} Data = ${data.size()}")
                 }
@@ -80,7 +80,12 @@ class LEManager(context: Context) : BleManager<LeManagerCallbacks>(context) {
                     Timber.d("Data sent")
                     listener(progress, context)
                 }
-                .enqueue()
+            if (fastMode){
+                send.split().enqueue()
+            } else {
+                send.enqueue()
+            }
+
             true
         } else {
             false
@@ -89,10 +94,15 @@ class LEManager(context: Context) : BleManager<LeManagerCallbacks>(context) {
 
 
 
-    fun writeBytes(bytes: ByteArray): Boolean {
+    fun writeBytes(fastMode: Boolean, bytes: ByteArray): Boolean {
         return if (isConnected && isReady && otaTxCharacteristic != null) {
             requestMtu(MTU).enqueue()
-            writeCharacteristic(otaTxCharacteristic, bytes).enqueue()
+            val send = writeCharacteristic(otaTxCharacteristic, bytes)
+            if (fastMode){
+                send.split().enqueue()
+            } else {
+                send.enqueue()
+            }
             true
         } else {
             false
