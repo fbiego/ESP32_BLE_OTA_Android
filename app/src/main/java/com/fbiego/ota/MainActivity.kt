@@ -661,7 +661,18 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
         Timber.e("RequestCode= $requestCode, ResultCode= $resultCode, Data= ${data != null}")
         if (resultCode == Activity.RESULT_OK) {
             if (data != null && requestCode == FILE_PICK) {
+                val selectedFile = data.data
+                val filePathColumn = arrayOf(MediaStore.Files.FileColumns.DATA)
+                if (selectedFile != null) {
+                    val filePath = RealPathUtil.getRealPath(this, selectedFile)
+                    if (filePath != null) {
+                        saveFile(File(filePath), null)
+                    }
+                }
+            }
 
+/*
+            if (data != null && requestCode == FILE_PICK) {
                 val selectedFile = data.data
                 val filePathColumn = arrayOf(MediaStore.Files.FileColumns.DATA)
                 if (selectedFile != null) {
@@ -687,6 +698,7 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                     }
                 }
             }
+*/
         }
     }
 
