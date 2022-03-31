@@ -40,14 +40,14 @@ android {
             }
         }
     }
-    compileSdkVersion 29
+    compileSdkVersion 31
 
     defaultConfig {
         applicationId "com.fbiego.ota"
         minSdkVersion 21
-        targetSdkVersion 29
-        versionCode 5
-        versionName "1.4"
+        targetSdkVersion 31
+        versionCode 6
+        versionName "1.5"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

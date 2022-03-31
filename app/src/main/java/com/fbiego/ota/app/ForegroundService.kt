@@ -460,7 +460,6 @@ class ForegroundService : Service(), DataListener {
             notifyProgress("Finishing up", 100, context)
             ProgressReceiver().getProgress(100, "Transfer Complete")
             Handler().postDelayed({
-                sendData(byteArrayOfInts(0xFE)) // send restart command
                 cancelNotification(SERVICE_ID2, context)
             }, 2000)
         }

@@ -481,6 +481,10 @@ class MainActivity : AppCompatActivity(), ConnectionListener, ProgressListener {
                 if (FG().sendData(byteArrayOfInts(0xFD))) {
                     Toast.makeText(this, "Uploading file", Toast.LENGTH_SHORT).show()
                     buttonUpload.visibility = View.INVISIBLE
+
+                    val len = File(this.cacheDir, UPDATE_FILE).length()
+                    FG().sendData(byteArrayOfInts(0xFE, ((len shr 24) and 0xFF).toInt(), ((len shr 16) and 0xFF).toInt(), ((len shr 8) and 0xFF).toInt(), ((len) and 0xFF).toInt()))
+
                     FG().sendData(
                             byteArrayOfInts(
                                     0xFF,
