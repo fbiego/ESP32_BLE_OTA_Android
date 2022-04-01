@@ -1,7 +1,7 @@
 # ESP32_BLE_OTA_Android
 Android app to perform OTA update on ESP32 via BLE
 
-[`BLE-OTA-v1.4.apk`](https://github.com/fbiego/ESP32_BLE_OTA_Android/raw/master/app/release/BLE-OTA-v1.4.apk)
+[`BLE-OTA-v1.5.apk`](https://github.com/fbiego/ESP32_BLE_OTA_Android/raw/master/app/release/BLE-OTA-v1.5.apk)
 
 ## Arduino
  [`ESP32 Code repository`](https://github.com/fbiego/ESP32_BLE_OTA_Arduino)
